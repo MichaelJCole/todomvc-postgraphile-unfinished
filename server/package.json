@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "express": "^4.17.1",
+    "express-session": "^1.17.1",
+    "graphile-utils": "^4.9.2",
     "morgan": "^1.10.0",
     "postgraphile": "^4.9.2"
   },
