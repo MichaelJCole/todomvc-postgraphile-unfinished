@@ -78,20 +78,17 @@ To deploy, I'll use an nginx ingress in Kubernetes with a "fan-out" configuratio
 See: https://www.graphile.org/postgraphile/quick-start-guide/
 
 ```
-# Install postgres and build tools
-$ sudo apt install postgresql postgresql-contrib
+# Start postgres 13 in docker container
+docker run -d -p 5432:5432 --name postgraphile -e POSTGRES_PASSWORD=changepassword postgres:13-alpine
 
-# Start postgres background service
-$ sudo service postgresql start
+# Install postgres 13 client
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+echo "deb http://apt.postgresql.org/pub/repos/apt/ `lsb_release -cs`-pgdg main" |sudo tee  /etc/apt/sources.list.d/postgresql.list
+sudo apt update
+sudo apt install postgresql-client-13
 
-# VERIFY:  connection between postgres server <-> psql client
-sudo -u postgres psql "postgres:///" -c "select 1 + 1 as two;"
-
-# Configure admin user `postgres`
-sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'changepassword';"
-
-# VERIFY:  authenticated connection to your database
-sudo -u postgres psql "postgres://postgres:changepassword@localhost:5432/postgres" -c "select 1 + 1 as two;"
+# VERIFY:  authenticated connection to your Postgres 13 database
+psql "postgres://postgres:changepassword@localhost:5432/postgres" -c "select version();"
 ```
 
 Build, buy, borrow, or beg, you will need a (working) Postgres "superuser" connection string:
@@ -151,6 +148,7 @@ Well, true, that. PostGraphile uses Postgres' schema to create the GraphQL API. 
 We're going to use the "Graphile Starter" project's setup scripts.
 
 ```
+cd ../server
 git clone git@github.com:graphile/starter.git
 (cd starter && git checkout ccb7d45a024fdf123d55a1de4bcff32908833f1e)
 mv starter/scripts .
@@ -189,6 +187,7 @@ EOF
 
 # When it asks for your "superuser connection", enter your postgres connection
 # from way back in the beginning: postgres://postgres:changepassword@localhost:5432/postgres
+npm install
 node ./scripts/setup_env.js auto
 node ./scripts/setup_db.js
 
@@ -201,7 +200,6 @@ Great! You now have a `.env` file and some databases. Test them now:
 
 ```
 set -a; . ./.env; set +a
-
 cat .env
 ```
 
@@ -214,6 +212,7 @@ Checkpoint. You should have these processes running:
 - `quasar dev` serving your web app, http://localhost:8081
 - `npm run dev` serving your GraphQL API, http://localhost:5678
 - Postgres running somewhere running databases.
+- A terminal with your `.env` values loaded (`set -a; . ./.env; set +a`)
 
 ## IMPORTANT: This is the Postgraphile development workflow:
 
@@ -230,6 +229,7 @@ You can decorate your sql with annotations. For example, [this `volatile` annota
 ## Setup `graphile-migrate`
 
 ```
+sudo service postgresql start
 set -a; . ./.env; set +a
 
 # run this once
@@ -255,8 +255,16 @@ Now edit your .gmrc and change "placeholders" to this. This connects the `.env` 
 
 ## Reset your databases to factory defaults and re-load `committed/*.sql`
 
+Deletes all your data, and recommits `committed/*.sql`
+
 ```
 graphile-migrate reset --erase
+```
+
+Watches and commits `current.sql`. Leave this running in your terminal.
+
+```
+graphile-migrate watch
 ```
 
 ## Load the starter schema
@@ -267,10 +275,14 @@ We can build upon the fully-featured auth system from the [PostGraphile Starter 
 - [Sends welcome and reset emails]()
 - [Create a Jobs queue for workers]()
 
-```
+In a new terminal
 
+```
+cd ../server
+set -a; . ./.env; set +a
+
+# import Starter project SQL
+wget -O migrations/current.sql https://raw.githubusercontent.com/graphile/starter/main/%40app/db/migrations/committed/000001.sql
 ```
 
 # Some links to documentation.
-
-wget -O migrations/current.sql https://raw.githubusercontent.com/graphile/starter/main/%40app/db/migrations/committed/000001.sql
