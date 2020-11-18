@@ -25,7 +25,6 @@ app.use(
       // Config
       graphqlRoute: '/gql/graphql', // Change to /graphql and mount app to /gql in http ingress
       graphiqlRoute: '/gql/graphiql', // Remove this feature in production
-      jwtSecret: config.JWT_SECRET,
 
       // Features
       subscriptions: true,     // Enable GraphQL subscriptions and Websockets

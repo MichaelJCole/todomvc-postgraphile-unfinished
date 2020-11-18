@@ -138,52 +138,56 @@ npm run dev
 [nodemon] watching path(s): *.*
 [nodemon] watching extensions: js,mjs,json
 [nodemon] starting `node index.js`
-WARNING: jwtSecret provided, however jwtPgTypeIdentifier (token identifier) not provided.
 ```
 
-Well, true, that. PostGraphile uses Postgres' schema to create the GraphQL API. Iterating our API is iterating our database.
+Groovy. PostGraphile uses Postgres' schema to create the GraphQL API. Iterating our GraphQL API is done by iterating our database schema.
 
 ## But wait, there's more.
 
-We're going to use the "Graphile Starter" project's setup scripts.
+We can build upon the fully-featured auth system from the [PostGraphile Starter project]().
+
+- [Authenticate and manage jwt tokens](https://github.com/graphile/starter/blob/main/%40app/db/migrations/committed/000001.sql#L497).
+- [Sends welcome and reset emails]()
+- [Create a Jobs queue for workers]()
+
+We're going to use the "Graphile Starter" project's setup scripts and database.
 
 ```
 cd ../server
+
+# Begin hack.  Get Starter scripts to setup .env file and configure database
 git clone git@github.com:graphile/starter.git
 (cd starter && git checkout ccb7d45a024fdf123d55a1de4bcff32908833f1e)
 mv starter/scripts .
-# if you're into Next.js, you should really check that out.
-# the Nuxt.js version didn't start when I ran it.
-```
 
-We'll need this configured to import the Starter project's example database and auth system.
+# Save this file for later
+cp starter/@app/db/migrations/afterReset.sql .
 
-```
-# We will use this alot
+# if you're into Next.js, you should really check that out repo.
+# the Nuxt.js version didn't work so I made this.
+
+# This tool will clean Postgres and migrate .sql into the schema.  We will use this alot.
 npm install -g graphile-migrate
 
-# The scripts need this to run:
+# Hack intensifying. The setup scripts need this to run:
 git init
 git add .
 git commit -m 'Graphile Starter base'
 
-# It's hacking time.
+# Hack hack overtime!
 mkdir -p @app/config
 cat << 'EOF' > @app/config/extra.js
 process.env.DATABASE_URL = `postgres://${process.env.DATABASE_OWNER}:${process.env.DATABASE_OWNER_PASSWORD}@${process.env.DATABASE_HOST}/${process.env.DATABASE_NAME}`;
 process.env.AUTH_DATABASE_URL = `postgres://${process.env.DATABASE_AUTHENTICATOR}:${process.env.DATABASE_AUTHENTICATOR_PASSWORD}@${process.env.DATABASE_HOST}/${process.env.DATABASE_NAME}`;
 process.env.SHADOW_DATABASE_URL = `postgres://${process.env.DATABASE_OWNER}:${process.env.DATABASE_OWNER_PASSWORD}@${process.env.DATABASE_HOST}/${process.env.DATABASE_NAME}_shadow`;
 process.env.SHADOW_AUTH_DATABASE_URL = `postgres://${process.env.DATABASE_AUTHENTICATOR}:${process.env.DATABASE_AUTHENTICATOR_PASSWORD}@${process.env.DATABASE_HOST}/${process.env.DATABASE_NAME}_shadow`;
-
 const fs = require('fs');
-
 fs.appendFileSync('.env', `DATABASE_URL=${process.env.DATABASE_URL}\n`);
 fs.appendFileSync('.env', `AUTH_DATABASE_URL=${process.env.AUTH_DATABASE_URL}\n`);
 fs.appendFileSync('.env', `SHADOW_AUTH_DATABASE_URL=${process.env.SHADOW_AUTH_DATABASE_URL}\n`);
-
 EOF
 
-# Run the scripts
+# Hack loot-phase begins.  Run the scripts
 
 # When it asks for your "superuser connection", enter your postgres connection
 # from way back in the beginning: postgres://postgres:changepassword@localhost:5432/postgres
@@ -191,19 +195,19 @@ npm install
 node ./scripts/setup_env.js auto
 node ./scripts/setup_db.js
 
-# Woe to the vanquished
+# Hack loot-phase complete.  Woe to the vanquished.
 rm -rf .git
 rm -rf starter
 ```
 
-Great! You now have a `.env` file and some databases. Test them now:
+Great! You now have a `.env` file with a bunch of settings and some database magic.
 
 ```
+# This loads your .env into your shell variables like $DATABASE_URL
 set -a; . ./.env; set +a
-cat .env
 ```
 
-You will see these `.env` values in variables in the next sections `.sql` code.
+You will see these `.env` values in variables in the next section's `.sql` code.
 
 # Create Postgres DB Schema so PostGraphile can recreate GraphQL API
 
@@ -229,7 +233,7 @@ You can decorate your sql with annotations. For example, [this `volatile` annota
 ## Setup `graphile-migrate`
 
 ```
-sudo service postgresql start
+# Load our project config into the shell
 set -a; . ./.env; set +a
 
 # run this once
@@ -244,7 +248,7 @@ migrations/committed <- files already committed
 migrations/current.sql <- your current work
 ```
 
-Now edit your .gmrc and change "placeholders" to this. This connects the `.env` to the `.sql` we'll run next:
+Now edit your `.gmrc` and change "placeholders" to this. This connects `.env` values to `.sql` template variables:
 
 ```
   "placeholders": {
@@ -253,15 +257,36 @@ Now edit your .gmrc and change "placeholders" to this. This connects the `.env` 
   },
 ```
 
+Also in `.gmrc`, replace this section. `afterReset.sql` contains superuser commands to enable extensions.
+
+```
+  "afterReset": [
+    "afterReset.sql",
+    // { "_": "command", "command": "graphile-worker --schema-only" },
+  ],
+```
+
+Move `afterReset.sql` into place:
+
+```
+mv afterReset.sql migrations
+```
+
 ## Reset your databases to factory defaults and re-load `committed/*.sql`
 
-Deletes all your data, and recommits `committed/*.sql`
+Resetting your database:
+
+- drops and creates all your databases
+- runs `afterReset.sql`
+- run `committed/*.sql`
+
+Run this command:
 
 ```
 graphile-migrate reset --erase
 ```
 
-Watches and commits `current.sql`. Leave this running in your terminal.
+Run this command to watch `current.sql`. Leave this running in your terminal.
 
 ```
 graphile-migrate watch
@@ -269,13 +294,7 @@ graphile-migrate watch
 
 ## Load the starter schema
 
-We can build upon the fully-featured auth system from the [PostGraphile Starter project]().
-
-- [Authenticate and manage jwt tokens](https://github.com/graphile/starter/blob/main/%40app/db/migrations/committed/000001.sql#L497).
-- [Sends welcome and reset emails]()
-- [Create a Jobs queue for workers]()
-
-In a new terminal
+When you save your `current.sql` work it gets committed or blows up. Let's add a bunch of `.sql` from the starter that we know works.
 
 ```
 cd ../server
@@ -285,4 +304,22 @@ set -a; . ./.env; set +a
 wget -O migrations/current.sql https://raw.githubusercontent.com/graphile/starter/main/%40app/db/migrations/committed/000001.sql
 ```
 
+Your `graphile-migrate watch` tab should have some new output. `current.sql` ran successfully.
+
+```
+graphile-migrate: Up to date — no committed migrations to run
+[2020-11-18T06:05:39.313Z]: Running current.sql
+[2020-11-18T06:05:39.465Z]: Finished (151ms)
+[2020-11-18T06:29:21.036Z]: Running current.sql
+[2020-11-18T06:29:21.085Z]: current.sql unchanged, skipping migration
+[2020-11-18T06:29:21.090Z]: Finished (53ms)
+```
+
+We can now commit our work:
+
+```
+
+
+
 # Some links to documentation.
+```
